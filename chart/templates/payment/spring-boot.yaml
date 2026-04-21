@@ -1,4 +1,4 @@
-# Spring Boot payment service. Reads postgres creds from the secret created by infra chart.
+# Spring Boot payment service
 ---
 apiVersion: apps/v1
 kind: Deployment

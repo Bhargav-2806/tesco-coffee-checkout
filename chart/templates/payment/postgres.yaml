@@ -1,4 +1,4 @@
-# Postgres — StatefulSet with a 1Gi PVC (size from values.yaml)
+# Postgres — StatefulSet with PVC
 ---
 apiVersion: v1
 kind: Service
@@ -6,7 +6,7 @@ metadata:
   name: postgres
   namespace: payment
 spec:
-  clusterIP: None               # headless — required by StatefulSet
+  clusterIP: None
   selector:
     app: postgres
   ports:

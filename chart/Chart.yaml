@@ -1,0 +1,7 @@
+# Single Helm chart for the whole Tesco Checkout stack.
+apiVersion: v2
+name: tesco
+description: Tesco Coffee Checkout — React + Go + Spring Boot + RabbitMQ + Postgres
+type: application
+version: 0.1.0
+appVersion: "1.0.0"

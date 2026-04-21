@@ -1,4 +1,4 @@
-# init.sql runs on first Postgres boot — plain SQL, no templating
+# init.sql runs on Postgres first boot
 apiVersion: v1
 kind: ConfigMap
 metadata:

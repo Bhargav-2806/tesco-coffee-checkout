@@ -1,0 +1,31 @@
+# Everything configurable lives here. CI updates the image tags on every push to main.
+
+# --- Container images ---
+images:
+  goApi:
+    repository: bhargav2806/tesco-go-api
+    tag: latest              # CI overwrites this line
+  reactNginx:
+    repository: bhargav2806/tesco-react-nginx
+    tag: latest              # CI overwrites this line
+  springBoot:
+    repository: bhargav2806/tesco-payment-service
+    tag: latest              # CI overwrites this line
+  rabbitmq: rabbitmq:3-management
+  postgres: postgres:16-alpine
+
+# --- RabbitMQ credentials ---
+rabbitmq:
+  user: guest
+  pass: secret123
+
+# --- Postgres credentials + storage ---
+postgres:
+  user: payments
+  pass: payments
+  db: payments
+  storage: 1Gi
+
+# --- Ingress hostname ---
+ingress:
+  host: tesco.localtest.me

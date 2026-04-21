@@ -1,4 +1,4 @@
-# RabbitMQ broker — image tag from values.yaml
+# RabbitMQ broker
 ---
 apiVersion: apps/v1
 kind: Deployment

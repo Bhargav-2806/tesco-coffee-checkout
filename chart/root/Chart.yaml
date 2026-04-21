@@ -1,7 +1,0 @@
-# App-of-apps — this chart contains no workloads. Its only job is to create
-# two ArgoCD Applications (tesco-infra and tesco-apps) in the argocd namespace.
-apiVersion: v2
-name: tesco-root
-description: App-of-apps root — manages tesco-infra and tesco-apps Applications
-type: application
-version: 0.1.0
