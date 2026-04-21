@@ -19,6 +19,7 @@ on:
       - 'go-api/**'
       - 'payment-service/**'
       - '.github/workflows/ci.yml'
+  workflow_dispatch:       # "Run workflow" button in the Actions tab — builds everything
 
 permissions:
   contents: write          # needed to push the values.yaml update back
@@ -31,9 +32,9 @@ jobs:
   detect:
     runs-on: ubuntu-latest
     outputs:
-      go-api:      ${{ steps.filter.outputs.go-api }}
-      frontend:    ${{ steps.filter.outputs.frontend }}
-      spring-boot: ${{ steps.filter.outputs.spring-boot }}
+      go-api:      ${{ steps.decide.outputs.go-api }}
+      frontend:    ${{ steps.decide.outputs.frontend }}
+      spring-boot: ${{ steps.decide.outputs.spring-boot }}
     steps:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v3
@@ -42,10 +43,26 @@ jobs:
           filters: |
             go-api:
               - 'go-api/**'
+              - '.github/workflows/ci.yml'
             frontend:
               - 'frontend/**'
+              - '.github/workflows/ci.yml'
             spring-boot:
               - 'payment-service/**'
+              - '.github/workflows/ci.yml'
+      # Manual run (workflow_dispatch) always builds everything.
+      # Push: only services whose files changed.
+      - id: decide
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "go-api=true"      >> "$GITHUB_OUTPUT"
+            echo "frontend=true"    >> "$GITHUB_OUTPUT"
+            echo "spring-boot=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "go-api=${{ steps.filter.outputs.go-api }}"           >> "$GITHUB_OUTPUT"
+            echo "frontend=${{ steps.filter.outputs.frontend }}"       >> "$GITHUB_OUTPUT"
+            echo "spring-boot=${{ steps.filter.outputs.spring-boot }}" >> "$GITHUB_OUTPUT"
+          fi
 
   # ---------------------------------------------------------------
   # 2a. Go API pipeline
