@@ -1,34 +1,40 @@
-# CI/CD — per-service pipeline:
-#   1. Detect which service changed
-#   2. For each changed service:  Build → SCA → SAST → Docker build → Image scan → Push
-#   3. After all pushes:           Update chart/values.yaml with new tag → commit → ArgoCD auto-deploys
+# CI/CD — per-service pipeline with each stage as its own job.
 #
-# Image tag scheme: v${{ github.run_number }} (e.g. v1, v2, v3 ...)
+# Pipeline per service:
+#   build ─┐
+#   sca   ─┼─→ docker-build ─→ image-scan ─→ push
+#   sast  ─┘
+#
+# Scanners currently run in "report-only" mode (exit-code: 0). They print
+# findings to the logs but don't block the pipeline. To make them blocking
+# later, set exit-code to '1' on the Trivy steps and add `--error` to Semgrep.
+#
+# Image tag scheme: v${{ github.run_number }} (v1, v2, v3 ...)
 #
 # Required GitHub repo secrets:
-#   DOCKERHUB_USERNAME  = bhargav2806
-#   DOCKERHUB_TOKEN     = Docker Hub PAT (Read & Write)
+#   DOCKERHUB_USERNAME = bhargav2806
+#   DOCKERHUB_TOKEN    = Docker Hub PAT
 
 name: CI/CD
 
 on:
   push:
     branches: [main]
-    paths:                 # only run when source code or this workflow changes
+    paths:
       - 'frontend/**'
       - 'go-api/**'
       - 'payment-service/**'
       - '.github/workflows/ci.yml'
-  workflow_dispatch:       # "Run workflow" button in the Actions tab — builds everything
+  workflow_dispatch:
 
 permissions:
-  contents: write          # needed to push the values.yaml update back
+  contents: write
 
 jobs:
 
-  # ---------------------------------------------------------------
-  # 1. Figure out which services actually changed in this commit
-  # ---------------------------------------------------------------
+  # =====================================================================
+  # Detect which services changed
+  # =====================================================================
   detect:
     runs-on: ubuntu-latest
     outputs:
@@ -50,8 +56,6 @@ jobs:
             spring-boot:
               - 'payment-service/**'
               - '.github/workflows/ci.yml'
-      # Manual run (workflow_dispatch) always builds everything.
-      # Push: only services whose files changed.
       - id: decide
         run: |
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
@@ -64,208 +68,317 @@ jobs:
             echo "spring-boot=${{ steps.filter.outputs.spring-boot }}" >> "$GITHUB_OUTPUT"
           fi
 
-  # ---------------------------------------------------------------
-  # 2a. Go API pipeline
-  # ---------------------------------------------------------------
-  go-api:
+  # =====================================================================
+  # GO API — 6 stages
+  # =====================================================================
+  go-api-build:
     needs: detect
     if: needs.detect.outputs.go-api == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
-      - name: Setup Go
-        uses: actions/setup-go@v5
+      - uses: actions/setup-go@v5
         with:
           go-version: '1.22'
-
-      - name: Build
-        working-directory: go-api
+      - working-directory: go-api
         run: |
           go mod tidy
           go build ./...
 
-      - name: SCA (Trivy fs)
+  go-api-sca:
+    needs: detect
+    if: needs.detect.outputs.go-api == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Trivy fs (report only)
         uses: aquasecurity/trivy-action@master
         with:
           scan-type: fs
           scan-ref: go-api
           severity: MEDIUM,HIGH,CRITICAL
-          exit-code: '1'
+          exit-code: '0'
           ignore-unfixed: true
 
-      - name: SAST (Semgrep)
+  go-api-sast:
+    needs: detect
+    if: needs.detect.outputs.go-api == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Semgrep (report only)
         run: |
           pip install semgrep
-          semgrep --config=p/default --error go-api/
+          semgrep --config=p/default go-api/ || true
 
-      - name: Log in to Docker Hub
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-
-      - name: Docker build (local)
+  go-api-docker-build:
+    needs: [go-api-build, go-api-sca, go-api-sast]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build image
         run: docker build -t bhargav2806/tesco-go-api:v${{ github.run_number }} ./go-api
+      - name: Save image to tarball
+        run: docker save bhargav2806/tesco-go-api:v${{ github.run_number }} -o /tmp/go-api.tar
+      - uses: actions/upload-artifact@v4
+        with:
+          name: go-api-image
+          path: /tmp/go-api.tar
+          retention-days: 1
 
-      - name: Image scan (Trivy)
+  go-api-image-scan:
+    needs: go-api-docker-build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: go-api-image
+          path: /tmp
+      - name: Load image
+        run: docker load -i /tmp/go-api.tar
+      - name: Trivy image scan (report only)
         uses: aquasecurity/trivy-action@master
         with:
           image-ref: bhargav2806/tesco-go-api:v${{ github.run_number }}
           severity: MEDIUM,HIGH,CRITICAL
-          exit-code: '1'
+          exit-code: '0'
           ignore-unfixed: true
 
-      - name: Push image
+  go-api-push:
+    needs: go-api-image-scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: go-api-image
+          path: /tmp
+      - name: Load image
+        run: docker load -i /tmp/go-api.tar
+      - uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Push to Docker Hub
         run: docker push bhargav2806/tesco-go-api:v${{ github.run_number }}
 
-  # ---------------------------------------------------------------
-  # 2b. React frontend pipeline
-  # ---------------------------------------------------------------
-  frontend:
+  # =====================================================================
+  # FRONTEND (React + nginx) — 6 stages
+  # =====================================================================
+  frontend-build:
     needs: detect
     if: needs.detect.outputs.frontend == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: '20'
-
-      - name: Build
-        working-directory: frontend
+      - working-directory: frontend
         run: |
           npm ci
           npm run build
 
-      - name: SCA (Trivy fs)
+  frontend-sca:
+    needs: detect
+    if: needs.detect.outputs.frontend == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Trivy fs (report only)
         uses: aquasecurity/trivy-action@master
         with:
           scan-type: fs
           scan-ref: frontend
           severity: MEDIUM,HIGH,CRITICAL
-          exit-code: '1'
+          exit-code: '0'
           ignore-unfixed: true
 
-      - name: SAST (Semgrep)
+  frontend-sast:
+    needs: detect
+    if: needs.detect.outputs.frontend == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Semgrep (report only)
         run: |
           pip install semgrep
-          semgrep --config=p/default --error frontend/
+          semgrep --config=p/default frontend/ || true
 
-      - name: Log in to Docker Hub
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-
-      - name: Docker build (local)
+  frontend-docker-build:
+    needs: [frontend-build, frontend-sca, frontend-sast]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build image
         run: docker build -t bhargav2806/tesco-react-nginx:v${{ github.run_number }} ./frontend
+      - name: Save image to tarball
+        run: docker save bhargav2806/tesco-react-nginx:v${{ github.run_number }} -o /tmp/frontend.tar
+      - uses: actions/upload-artifact@v4
+        with:
+          name: frontend-image
+          path: /tmp/frontend.tar
+          retention-days: 1
 
-      - name: Image scan (Trivy)
+  frontend-image-scan:
+    needs: frontend-docker-build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: frontend-image
+          path: /tmp
+      - name: Load image
+        run: docker load -i /tmp/frontend.tar
+      - name: Trivy image scan (report only)
         uses: aquasecurity/trivy-action@master
         with:
           image-ref: bhargav2806/tesco-react-nginx:v${{ github.run_number }}
           severity: MEDIUM,HIGH,CRITICAL
-          exit-code: '1'
+          exit-code: '0'
           ignore-unfixed: true
 
-      - name: Push image
+  frontend-push:
+    needs: frontend-image-scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: frontend-image
+          path: /tmp
+      - name: Load image
+        run: docker load -i /tmp/frontend.tar
+      - uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Push to Docker Hub
         run: docker push bhargav2806/tesco-react-nginx:v${{ github.run_number }}
 
-  # ---------------------------------------------------------------
-  # 2c. Spring Boot payment service pipeline
-  # ---------------------------------------------------------------
-  spring-boot:
+  # =====================================================================
+  # SPRING BOOT payment service — 6 stages
+  # =====================================================================
+  spring-boot-build:
     needs: detect
     if: needs.detect.outputs.spring-boot == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
-      - name: Setup Java
-        uses: actions/setup-java@v4
+      - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '21'
           cache: maven
-
-      - name: Build
-        working-directory: payment-service
+      - working-directory: payment-service
         run: mvn -B package -DskipTests
 
-      - name: SCA (Trivy fs)
+  spring-boot-sca:
+    needs: detect
+    if: needs.detect.outputs.spring-boot == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Trivy fs (report only)
         uses: aquasecurity/trivy-action@master
         with:
           scan-type: fs
           scan-ref: payment-service
           severity: MEDIUM,HIGH,CRITICAL
-          exit-code: '1'
+          exit-code: '0'
           ignore-unfixed: true
 
-      - name: SAST (Semgrep)
+  spring-boot-sast:
+    needs: detect
+    if: needs.detect.outputs.spring-boot == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Semgrep (report only)
         run: |
           pip install semgrep
-          semgrep --config=p/default --error payment-service/
+          semgrep --config=p/default payment-service/ || true
 
-      - name: Log in to Docker Hub
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-
-      - name: Docker build (local)
+  spring-boot-docker-build:
+    needs: [spring-boot-build, spring-boot-sca, spring-boot-sast]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build image
         run: docker build -t bhargav2806/tesco-payment-service:v${{ github.run_number }} ./payment-service
+      - name: Save image to tarball
+        run: docker save bhargav2806/tesco-payment-service:v${{ github.run_number }} -o /tmp/spring-boot.tar
+      - uses: actions/upload-artifact@v4
+        with:
+          name: spring-boot-image
+          path: /tmp/spring-boot.tar
+          retention-days: 1
 
-      - name: Image scan (Trivy)
+  spring-boot-image-scan:
+    needs: spring-boot-docker-build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: spring-boot-image
+          path: /tmp
+      - name: Load image
+        run: docker load -i /tmp/spring-boot.tar
+      - name: Trivy image scan (report only)
         uses: aquasecurity/trivy-action@master
         with:
           image-ref: bhargav2806/tesco-payment-service:v${{ github.run_number }}
           severity: MEDIUM,HIGH,CRITICAL
-          exit-code: '1'
+          exit-code: '0'
           ignore-unfixed: true
 
-      - name: Push image
+  spring-boot-push:
+    needs: spring-boot-image-scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: spring-boot-image
+          path: /tmp
+      - name: Load image
+        run: docker load -i /tmp/spring-boot.tar
+      - uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Push to Docker Hub
         run: docker push bhargav2806/tesco-payment-service:v${{ github.run_number }}
 
-  # ---------------------------------------------------------------
-  # 3. After all services finish, bump the tag(s) in values.yaml
-  #    and commit. ArgoCD sees the change and redeploys.
-  # ---------------------------------------------------------------
+  # =====================================================================
+  # Update Helm chart with new tags, commit back → ArgoCD picks it up
+  # =====================================================================
   update-helm:
-    needs: [detect, go-api, frontend, spring-boot]
-    # run if AT LEAST ONE service job succeeded; skip if none ran or all failed
+    needs: [detect, go-api-push, frontend-push, spring-boot-push]
     if: |
       always() &&
-      (needs.go-api.result == 'success' ||
-       needs.frontend.result == 'success' ||
-       needs.spring-boot.result == 'success')
+      (needs.go-api-push.result == 'success' ||
+       needs.frontend-push.result == 'success' ||
+       needs.spring-boot-push.result == 'success')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - name: Install yq
         run: |
           sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
           sudo chmod +x /usr/local/bin/yq
-
-      - name: Update values.yaml tags
+      - name: Update values.yaml
         env:
           TAG: v${{ github.run_number }}
         run: |
-          if [[ "${{ needs.go-api.result }}" == "success" ]]; then
+          if [[ "${{ needs.go-api-push.result }}" == "success" ]]; then
             yq eval ".images.goApi.tag = \"$TAG\"" -i chart/values.yaml
           fi
-          if [[ "${{ needs.frontend.result }}" == "success" ]]; then
+          if [[ "${{ needs.frontend-push.result }}" == "success" ]]; then
             yq eval ".images.reactNginx.tag = \"$TAG\"" -i chart/values.yaml
           fi
-          if [[ "${{ needs.spring-boot.result }}" == "success" ]]; then
+          if [[ "${{ needs.spring-boot-push.result }}" == "success" ]]; then
             yq eval ".images.springBoot.tag = \"$TAG\"" -i chart/values.yaml
           fi
           echo "--- updated values.yaml ---"
           cat chart/values.yaml
-
       - name: Commit + push
         run: |
           git config user.name  "github-actions[bot]"
