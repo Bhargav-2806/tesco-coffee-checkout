@@ -1,0 +1,7 @@
+# Applications chart — stateless workloads. Safe to prune + selfHeal aggressively.
+apiVersion: v2
+name: tesco-apps
+description: Stateless application services — React, Go API, Spring Boot, Ingress
+type: application
+version: 0.1.0
+appVersion: "1.0.0"

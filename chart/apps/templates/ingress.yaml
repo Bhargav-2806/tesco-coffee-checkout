@@ -1,4 +1,4 @@
-# Ingress host comes from values.yaml — easy to override per environment
+# Single public entry point — traffic goes to react-nginx
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:

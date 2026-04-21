@@ -25,3 +25,6 @@ payment-service/.mvn/
 
 # Docker layer cache markers (just in case)
 .dockerignore.bak
+
+# ArgoCD repo credential — contains a real PAT, never commit
+argocd/repo-secret.yaml

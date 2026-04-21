@@ -1,0 +1,3 @@
+# Shared source-of-truth for the child Applications
+repoURL: https://github.com/Bhargav-2806/tesco-coffee-checkout.git
+targetRevision: main

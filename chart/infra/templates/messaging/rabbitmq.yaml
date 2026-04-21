@@ -1,4 +1,4 @@
-# RabbitMQ broker — image tag is now controlled by values.yaml
+# RabbitMQ broker — image tag from values.yaml
 ---
 apiVersion: apps/v1
 kind: Deployment

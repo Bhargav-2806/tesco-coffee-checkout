@@ -1,0 +1,19 @@
+# Infra-only values. Duplicated credentials (rabbitmq) in apps/values.yaml
+# will go away once we introduce Sealed Secrets later.
+
+# --- Images for stateful services ---
+images:
+  rabbitmq: rabbitmq:3-management
+  postgres: postgres:16-alpine
+
+# --- RabbitMQ admin credentials ---
+rabbitmq:
+  user: guest
+  pass: secret123
+
+# --- Postgres credentials + storage size ---
+postgres:
+  user: payments
+  pass: payments
+  db: payments
+  storage: 1Gi

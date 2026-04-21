@@ -1,4 +1,5 @@
-# Go API — image now comes from values.yaml
+# Go API — reads RMQ_USER / RMQ_PASS from secret, builds RABBITMQ_URL via $(VAR) substitution.
+# Order matters: the referenced vars MUST be declared before the consumer.
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -21,7 +22,6 @@ spec:
           ports:
             - containerPort: 8080
           env:
-            # $(VAR) substitution requires the referenced vars to come FIRST
             - name: RABBIT_USER
               valueFrom:
                 secretKeyRef:

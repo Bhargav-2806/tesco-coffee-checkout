@@ -1,4 +1,4 @@
-# Postgres — image tag and PVC size now come from values.yaml
+# Postgres — StatefulSet with a 1Gi PVC (size from values.yaml)
 ---
 apiVersion: v1
 kind: Service

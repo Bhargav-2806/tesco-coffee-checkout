@@ -1,4 +1,4 @@
-# Spring Boot payment processor — image + creds sourced from values.yaml
+# Spring Boot payment service. Reads postgres creds from the secret created by infra chart.
 ---
 apiVersion: apps/v1
 kind: Deployment

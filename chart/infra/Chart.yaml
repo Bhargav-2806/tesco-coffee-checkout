@@ -1,0 +1,8 @@
+# Infrastructure chart — stateful services (Postgres, RabbitMQ) and their credentials.
+# Deployed by the "tesco-infra" ArgoCD Application with prune=false (never auto-delete data).
+apiVersion: v2
+name: tesco-infra
+description: Stateful platform services for Tesco Checkout — Postgres + RabbitMQ
+type: application
+version: 0.1.0
+appVersion: "1.0.0"

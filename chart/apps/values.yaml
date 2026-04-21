@@ -1,0 +1,26 @@
+# Apps-only values. The rabbitmq/postgres creds below MUST match infra/values.yaml
+# for now — Sealed Secrets will remove this duplication later.
+
+# --- App images (bump tag to redeploy) ---
+images:
+  goApi:
+    repository: bhargav2806/tesco-go-api
+    tag: latest
+  reactNginx:
+    repository: bhargav2806/tesco-react-nginx
+    tag: latest
+  springBoot:
+    repository: bhargav2806/tesco-payment-service
+    tag: latest
+
+# --- Connection credentials the apps need ---
+rabbitmq:
+  user: guest
+  pass: secret123
+
+postgres:
+  db: payments
+
+# --- Ingress hostname ---
+ingress:
+  host: tesco.localtest.me
