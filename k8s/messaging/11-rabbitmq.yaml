@@ -1,0 +1,43 @@
+# RabbitMQ broker — single pod, message state is lost on restart (fine for learning)
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rabbitmq
+  namespace: messaging
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: rabbitmq
+  template:
+    metadata:
+      labels:
+        app: rabbitmq
+    spec:
+      containers:
+        - name: rabbitmq
+          image: rabbitmq:3-management      # includes the web UI on 15672
+          ports:
+            - containerPort: 5672           # AMQP port (clients)
+            - containerPort: 15672          # management UI
+          envFrom:
+            - secretRef:
+                name: rabbitmq-credentials  # injects user + pass as env vars
+---
+# Service gives the pod a stable DNS name: rabbitmq.messaging
+apiVersion: v1
+kind: Service
+metadata:
+  name: rabbitmq
+  namespace: messaging
+spec:
+  selector:
+    app: rabbitmq
+  ports:
+    - name: amqp
+      port: 5672
+      targetPort: 5672
+    - name: management
+      port: 15672
+      targetPort: 15672

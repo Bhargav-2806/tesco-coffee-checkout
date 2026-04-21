@@ -1,0 +1,27 @@
+# Node / React build artifacts
+node_modules/
+build/
+dist/
+coverage/
+
+# OS / editor noise
+.DS_Store
+.idea/
+.vscode/
+*.iml
+*.log
+
+# Any .env file (never commit secrets) — keep .env.example as the template
+.env
+.env.*
+!.env.example
+
+# Go build output
+go-api/bin/
+
+# Java / Maven build output
+payment-service/target/
+payment-service/.mvn/
+
+# Docker layer cache markers (just in case)
+.dockerignore.bak

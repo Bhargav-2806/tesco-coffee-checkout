@@ -1,0 +1,7 @@
+# Don't copy these into the Docker build context (keeps builds fast + image small)
+node_modules
+dist
+.env
+.env.*
+!.env.example
+.git

@@ -1,0 +1,61 @@
+# Postgres — StatefulSet so data survives pod restarts (via PVC attached to the pod)
+---
+# Headless Service (clusterIP: None) is required by StatefulSet for stable DNS
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres                     # => DNS "postgres" inside the payment namespace
+  namespace: payment
+spec:
+  clusterIP: None
+  selector:
+    app: postgres
+  ports:
+    - port: 5432
+      targetPort: 5432
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+  namespace: payment
+spec:
+  serviceName: postgres              # must match the Service name above
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          ports:
+            - containerPort: 5432
+          envFrom:
+            - secretRef:
+                name: postgres-credentials   # user / pass / db name
+          volumeMounts:
+            # Mount PVC at Postgres's data dir → this is what persists your data
+            - name: postgres-data
+              mountPath: /var/lib/postgresql/data
+              subPath: pgdata
+            # Mount init.sql so Postgres auto-runs it on first boot
+            - name: init-sql
+              mountPath: /docker-entrypoint-initdb.d
+      volumes:
+        - name: init-sql
+          configMap:
+            name: postgres-init-sql
+  # Auto-creates a 1Gi PVC for the pod
+  volumeClaimTemplates:
+    - metadata:
+        name: postgres-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 1Gi

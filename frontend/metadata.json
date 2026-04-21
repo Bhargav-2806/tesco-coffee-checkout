@@ -1,0 +1,6 @@
+{
+  "name": "Coffee Checkout",
+  "description": "A production-ready coffee ordering application with secure payment flow and order tracking.",
+  "requestFramePermissions": [],
+  "majorCapabilities": []
+}

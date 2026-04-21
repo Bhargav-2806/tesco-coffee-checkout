@@ -1,0 +1,21 @@
+# init.sql runs automatically on Postgres's first boot (not templated — plain SQL)
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-init-sql
+  namespace: payment
+data:
+  init.sql: |
+    CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+
+    CREATE TABLE IF NOT EXISTS payments (
+        id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        order_id        VARCHAR(64) NOT NULL UNIQUE,
+        amount          NUMERIC(10, 2) NOT NULL,
+        currency        VARCHAR(3) NOT NULL DEFAULT 'GBP',
+        card_last_four  VARCHAR(4),
+        status          VARCHAR(16) NOT NULL,
+        created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_payments_order_id ON payments(order_id);

@@ -1,0 +1,63 @@
+# Spring Boot — consumes order.created → writes to Postgres → publishes payment.result
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: spring-boot
+  namespace: payment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: spring-boot
+  template:
+    metadata:
+      labels:
+        app: spring-boot
+    spec:
+      containers:
+        - name: spring-boot
+          image: bhargav2806/tesco-payment-service:latest
+          ports:
+            - containerPort: 8081
+          env:
+            # Postgres lives in the same namespace → short DNS "postgres" works
+            - name: SPRING_DATASOURCE_URL
+              value: "jdbc:postgresql://postgres:5432/payments"
+            - name: SPRING_DATASOURCE_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-credentials
+                  key: POSTGRES_USER
+            - name: SPRING_DATASOURCE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-credentials
+                  key: POSTGRES_PASSWORD
+            # RabbitMQ lives in a DIFFERENT namespace → use "rabbitmq.messaging"
+            - name: SPRING_RABBITMQ_HOST
+              value: "rabbitmq.messaging"
+            - name: SPRING_RABBITMQ_PORT
+              value: "5672"
+            - name: SPRING_RABBITMQ_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: rabbitmq-client-credentials
+                  key: RABBITMQ_DEFAULT_USER
+            - name: SPRING_RABBITMQ_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: rabbitmq-client-credentials
+                  key: RABBITMQ_DEFAULT_PASS
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: spring-boot
+  namespace: payment
+spec:
+  selector:
+    app: spring-boot
+  ports:
+    - port: 8081
+      targetPort: 8081

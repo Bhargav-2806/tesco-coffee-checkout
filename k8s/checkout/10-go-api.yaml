@@ -1,0 +1,49 @@
+# Go API — publishes order.created, consumes payment.result, keeps in-memory status map
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: go-api
+  namespace: checkout
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: go-api
+  template:
+    metadata:
+      labels:
+        app: go-api
+    spec:
+      containers:
+        - name: go-api
+          image: bhargav2806/tesco-go-api:latest
+          ports:
+            - containerPort: 8080
+          env:
+            # IMPORTANT: vars used in $(VAR) substitution must be declared FIRST
+            - name: RABBIT_USER
+              valueFrom:
+                secretKeyRef:
+                  name: rabbitmq-client-credentials
+                  key: RABBITMQ_DEFAULT_USER
+            - name: RABBIT_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: rabbitmq-client-credentials
+                  key: RABBITMQ_DEFAULT_PASS
+            # Full AMQP URL — K8s substitutes $(RABBIT_USER) and $(RABBIT_PASS) at pod start
+            - name: RABBITMQ_URL
+              value: "amqp://$(RABBIT_USER):$(RABBIT_PASS)@rabbitmq.messaging:5672/"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: go-api                        # matches "http://go-api:8080" in nginx.conf
+  namespace: checkout
+spec:
+  selector:
+    app: go-api
+  ports:
+    - port: 8080
+      targetPort: 8080

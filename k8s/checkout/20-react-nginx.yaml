@@ -1,0 +1,34 @@
+# React SPA served by nginx — static files + /api/* proxy to go-api (configured in nginx.conf)
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: react-nginx
+  namespace: checkout
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: react-nginx
+  template:
+    metadata:
+      labels:
+        app: react-nginx
+    spec:
+      containers:
+        - name: react-nginx
+          image: bhargav2806/tesco-react-nginx:latest
+          ports:
+            - containerPort: 80
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: react-nginx            # backend for the Ingress
+  namespace: checkout
+spec:
+  selector:
+    app: react-nginx
+  ports:
+    - port: 80
+      targetPort: 80

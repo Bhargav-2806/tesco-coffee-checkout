@@ -1,0 +1,113 @@
+# docker-compose orchestrates all 5 containers on a single Docker bridge network
+# Run:  docker compose up --build
+# Stop: docker compose down
+
+services:
+
+  # -------------------- Container 1: React served by nginx --------------------
+  react-nginx:
+    # Build the image from the ./frontend directory (its Dockerfile)
+    build: ./frontend
+    container_name: react-nginx
+    # Host port 3000 -> container port 80 (nginx)
+    ports:
+      - "3000:80"
+    # Ensure go-api is started before react-nginx (doesn't wait for healthy, just running)
+    depends_on:
+      - go-api
+    # Attach to our shared network
+    networks:
+      - checkout-net
+
+  # -------------------- Container 2: Go REST API --------------------
+  go-api:
+    build: ./go-api
+    container_name: go-api
+    environment:
+      # Internal AMQP URL — "rabbitmq" is the service name resolved by Docker DNS
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
+      PORT: "8080"
+    # Expose 8080 on the host so you can hit it directly for debugging (optional)
+    ports:
+      - "8080:8080"
+    # Wait for rabbitmq to report healthy before starting
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    # Simple healthcheck that hits /health every 10s
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks:
+      - checkout-net
+
+  # -------------------- Container 3: RabbitMQ broker --------------------
+  rabbitmq:
+    # Official image with the management plugin (gives us the web UI on 15672)
+    image: rabbitmq:3-management
+    container_name: rabbitmq
+    ports:
+      - "5672:5672"    # AMQP protocol port (used by go-api + spring-boot)
+      - "15672:15672"  # Management UI at http://localhost:15672 (guest/guest)
+    # Built-in diagnostic ping confirms the broker is accepting connections
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - checkout-net
+
+  # -------------------- Container 4: Spring Boot payment service --------------------
+  spring-boot:
+    build: ./payment-service
+    container_name: spring-boot
+    environment:
+      # These override values in application.yml (Spring Boot reads SPRING_* env vars automatically)
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgresql:5432/payments
+      SPRING_DATASOURCE_USERNAME: payments
+      SPRING_DATASOURCE_PASSWORD: payments
+      SPRING_RABBITMQ_HOST: rabbitmq
+    # Expose 8081 only for debugging the actuator endpoint
+    ports:
+      - "8081:8081"
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      postgresql:
+        condition: service_healthy
+    networks:
+      - checkout-net
+
+  # -------------------- Container 5: PostgreSQL database --------------------
+  postgresql:
+    image: postgres:15-alpine
+    container_name: postgresql
+    environment:
+      POSTGRES_DB: payments
+      POSTGRES_USER: payments
+      POSTGRES_PASSWORD: payments
+    ports:
+      - "5432:5432"
+    # Mount init.sql so Postgres creates the schema on first boot
+    volumes:
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U payments -d payments"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - checkout-net
+
+# Named bridge network so service-name DNS resolution works between containers
+networks:
+  checkout-net:
+    driver: bridge
+
+# Named volume persists Postgres data across `docker compose down` (removed with `down -v`)
+volumes:
+  postgres-data:

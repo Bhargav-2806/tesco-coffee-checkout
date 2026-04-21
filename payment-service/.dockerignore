@@ -1,0 +1,6 @@
+# Don't copy these into the build context
+target
+.idea
+.mvn
+.git
+*.iml

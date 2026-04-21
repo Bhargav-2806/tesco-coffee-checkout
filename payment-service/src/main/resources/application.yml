@@ -1,0 +1,45 @@
+# Spring Boot reads this file automatically on startup
+# Each key maps to a Spring property — values can be overridden by env vars (e.g. SPRING_DATASOURCE_URL)
+
+spring:
+  application:
+    # Shows up in logs + actuator info; purely cosmetic
+    name: payment-service
+
+  # --- Database (Postgres) ---
+  datasource:
+    # JDBC URL — "postgresql" is the docker-compose service name resolved by Docker DNS
+    url: jdbc:postgresql://postgresql:5432/payments
+    username: payments
+    password: payments
+
+  # --- JPA / Hibernate ---
+  jpa:
+    hibernate:
+      # "validate" means Hibernate checks the schema matches but does not alter it (init.sql owns schema)
+      ddl-auto: validate
+    properties:
+      hibernate:
+        # Prints SQL in the logs — useful while learning, remove in real production
+        format_sql: true
+
+  # --- RabbitMQ ---
+  rabbitmq:
+    # Service name in docker-compose
+    host: rabbitmq
+    port: 5672
+    username: guest
+    password: guest
+
+# --- Web server ---
+server:
+  # Payment service listens on 8081 internally; only actuator/health is exposed (no business API)
+  port: 8081
+
+# --- Actuator (used by Docker/K8s liveness probes) ---
+management:
+  endpoints:
+    web:
+      exposure:
+        # Only expose the health endpoint externally
+        include: health

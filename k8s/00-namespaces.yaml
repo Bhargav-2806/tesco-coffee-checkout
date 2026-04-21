@@ -1,0 +1,16 @@
+# Three namespaces to separate the 3 parts of the system
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: checkout          # React + Go API
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: payment           # Spring Boot + Postgres
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: messaging         # RabbitMQ

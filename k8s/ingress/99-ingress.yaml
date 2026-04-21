@@ -1,0 +1,20 @@
+# Ingress routes browser traffic → react-nginx Service (the SPA + its /api proxy)
+# Hostname tesco.localtest.me resolves to 127.0.0.1 automatically (no /etc/hosts edit needed)
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: tesco-ingress
+  namespace: checkout
+spec:
+  ingressClassName: nginx            # use the NGINX Ingress Controller
+  rules:
+    - host: tesco.localtest.me
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: react-nginx
+                port:
+                  number: 80
