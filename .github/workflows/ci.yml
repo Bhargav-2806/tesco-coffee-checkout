@@ -12,8 +12,8 @@
 # Image tag scheme: v${{ github.run_number }} (v1, v2, v3 ...)
 #
 # Required GitHub repo secrets:
-#   DOCKERHUB_USERNAME = bhargav2806
-#   DOCKERHUB_TOKEN    = Docker Hub PAT
+#   DOCKERHUB_USERNAME = <Your Docker HUB user name>
+#   DOCKERHUB_TOKEN    = <Docker Hub PAT>
 
 name: CI/CD
 
